@@ -1,3 +1,4 @@
-<img width="2482" height="1396" alt="GithubDisplay1" src="https://github.com/user-attachments/assets/e137ac13-4d11-40bc-b9e2-cf284bc68b3f" />
+<img width="320" height="330" alt="GithubVideo2" src="https://github.com/user-attachments/assets/467a4cd1-a3c9-4b5f-bbfd-7d409264205d" />
+
 Detects and downloads VTT subtitle files on video pages via direct blob for UT Austin video resources
 Grabs transcripts
