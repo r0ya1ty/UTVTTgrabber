@@ -1,0 +1,114 @@
+// ==UserScript==
+// @name         VTT Subtitle Grabber
+// @namespace    http://tampermonkey.net/
+// @version      1.1
+// @description  Detects and downloads VTT subtitle files on video pages via direct blob
+// @author       You
+// @match        https://tower.la.utexas.edu/*
+// @grant        GM_addStyle
+// @grant        GM_xmlhttpRequest
+// @connect      *
+// @run-at       document-start
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    const capturedVtts = new Set();
+
+    GM_addStyle(`
+        #vtt-grabber-box {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.85);
+            color: #fff;
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-family: sans-serif;
+            font-size: 13px;
+            z-index: 999999;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            display: none;
+        }
+        #vtt-grabber-box a {
+            color: #4da3ff;
+            text-decoration: underline;
+            cursor: pointer;
+            display: block;
+            margin-top: 6px;
+        }
+    `);
+
+    const container = document.createElement('div');
+    container.id = 'vtt-grabber-box';
+    container.innerHTML = '<strong>Captions found:</strong>';
+    document.documentElement.appendChild(container);
+
+    function triggerDownload(content, filename) {
+        const blob = new Blob([content], { type: 'text/vtt;charset=utf-8' });
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+    }
+
+    function addVttLink(url) {
+        // Resolve relative paths to full absolute URLs
+        const absoluteUrl = new URL(url, window.location.href).href;
+        if (capturedVtts.has(absoluteUrl)) return;
+        capturedVtts.add(absoluteUrl);
+
+        container.style.display = 'block';
+
+        const link = document.createElement('a');
+        link.textContent = `Download VTT (${capturedVtts.size})`;
+        link.onclick = (e) => {
+            e.preventDefault();
+            link.textContent = 'Downloading...';
+
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url: absoluteUrl,
+                onload: function(response) {
+                    const filename = absoluteUrl.split('/').pop().split('?')[0] || 'captions.vtt';
+                    triggerDownload(response.responseText, filename.endsWith('.vtt') ? filename : `${filename}.vtt`);
+                    link.textContent = `Download VTT (${capturedVtts.size}) ✓`;
+                },
+                onerror: function() {
+                    link.textContent = 'Failed (Right-click to open)';
+                    link.href = absoluteUrl;
+                    link.target = '_blank';
+                    link.onclick = null;
+                }
+            });
+        };
+
+        container.appendChild(link);
+    }
+
+    const originalFetch = window.fetch;
+    window.fetch = async function(...args) {
+        const url = typeof args[0] === 'string' ? args[0] : args[0]?.url;
+        if (url && url.includes('.vtt')) addVttLink(url);
+        return originalFetch.apply(this, args);
+    };
+
+    const originalOpen = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function(method, url) {
+        if (typeof url === 'string' && url.includes('.vtt')) addVttLink(url);
+        return originalOpen.apply(this, arguments);
+    };
+
+    const observer = new MutationObserver(() => {
+        document.querySelectorAll('track').forEach(track => {
+            if (track.src && track.src.includes('.vtt')) addVttLink(track.src);
+        });
+    });
+
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+})();
